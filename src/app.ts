@@ -45,6 +45,17 @@ const toListing = (listing: any) => ({
 
 app.get("/health", (_req, res) => res.json({ status: "ok", service: "property-portal-api" }));
 
+app.post("/api/v1/auth/login", async (req, res, next) => {
+  try {
+    const credentials = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
+    const user = await prisma.user.findUnique({ where: { email: credentials.email }, include: { profile: true, agency: true } });
+    // Seed accounts intentionally use a shared password for local/demo testing only.
+    if (!user || user.status !== "ACTIVE" || credentials.password !== "demo-password") return res.status(401).json({ error: "Invalid email or password" });
+    const token = Buffer.from(`${user.id}:${Date.now()}`).toString("base64url");
+    res.json({ data: { token, user: { id: user.id, email: user.email, role: user.role.toLowerCase(), profile: user.profile, agency: user.agency } } });
+  } catch (error) { next(error); }
+});
+
 app.get("/api/v1/meta", async (_req, res, next) => {
   try {
     const [locations, categories, amenities] = await Promise.all([
