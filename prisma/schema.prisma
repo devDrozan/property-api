@@ -1,0 +1,263 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum UserRole {
+  OWNER
+  AGENT
+  BUYER_RENTER
+  STAFF
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum ListingPurpose {
+  SALE
+  RENT
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  PAUSED
+  CHANGES_REQUESTED
+  REJECTED
+  EXPIRED
+  ARCHIVED
+}
+
+enum InquiryStatus {
+  NEW
+  CONTACTED
+  CLOSED
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+model User {
+  id             String              @id @default(cuid())
+  email          String              @unique
+  passwordHash   String
+  role           UserRole
+  status         UserStatus          @default(ACTIVE)
+  profile        UserProfile?
+  agencyId       String?
+  agency         Agency?             @relation(fields: [agencyId], references: [id])
+  ownedListings  Listing[]           @relation("OwnerListings")
+  agentListings  Listing[]           @relation("AgentListings")
+  favorites      Favorite[]
+  savedSearches  SavedSearch[]
+  inquiries      Inquiry[]           @relation("BuyerInquiries")
+  receivedInquiries Inquiry[]        @relation("RecipientInquiries")
+  reports        Report[]
+  auditLogs      AuditLog[]
+  statusHistory  ListingStatusHistory[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+}
+
+model UserProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  displayName String
+  phone       String?
+  bio         String?
+  avatarUrl   String?
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Agency {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  users       User[]
+  listings    Listing[]
+  createdAt   DateTime @default(now())
+}
+
+model Location {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  kind        String
+  parentId    String?
+  parent      Location?   @relation("LocationTree", fields: [parentId], references: [id])
+  children    Location[]  @relation("LocationTree")
+  listings    Listing[]
+  latitude    Float?
+  longitude   Float?
+  isActive    Boolean     @default(true)
+}
+
+model PropertyCategory {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  description String?
+  icon        String?
+  listings    Listing[]
+  createdAt   DateTime  @default(now())
+}
+
+model Amenity {
+  id       String            @id @default(cuid())
+  name     String
+  slug     String            @unique
+  listings ListingAmenity[]
+}
+
+model Listing {
+  id             String             @id @default(cuid())
+  slug           String             @unique
+  title          String
+  description    String
+  purpose        ListingPurpose
+  status         ListingStatus       @default(DRAFT)
+  price          Int
+  currency       String             @default("MMK")
+  rentalPeriod   String?
+  negotiable     Boolean            @default(false)
+  bedrooms       Int?
+  bathrooms      Int?
+  areaSqft       Int?
+  landAreaSqft   Int?
+  parking        Int?
+  yearBuilt      Int?
+  address        String
+  latitude       Float?
+  longitude      Float?
+  coverImage     String
+  publishedAt    DateTime?
+  expiresAt      DateTime?
+  ownerId        String?
+  owner          User?              @relation("OwnerListings", fields: [ownerId], references: [id])
+  agentId        String?
+  agent          User?              @relation("AgentListings", fields: [agentId], references: [id])
+  agencyId       String?
+  agency         Agency?            @relation(fields: [agencyId], references: [id])
+  locationId     String
+  location       Location           @relation(fields: [locationId], references: [id])
+  categoryId     String
+  category       PropertyCategory   @relation(fields: [categoryId], references: [id])
+  media          ListingMedia[]
+  amenities      ListingAmenity[]
+  favorites      Favorite[]
+  savedSearches  SavedSearch[]
+  inquiries      Inquiry[]
+  reports        Report[]
+  statusHistory  ListingStatusHistory[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([purpose, status])
+  @@index([locationId, categoryId])
+  @@index([price])
+}
+
+model ListingMedia {
+  id        String   @id @default(cuid())
+  url       String
+  altText   String?
+  sortOrder Int      @default(0)
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+}
+
+model ListingAmenity {
+  listingId String
+  amenityId String
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  amenity   Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([listingId, amenityId])
+}
+
+model ListingStatusHistory {
+  id        String        @id @default(cuid())
+  listingId String
+  from      ListingStatus?
+  to        ListingStatus
+  reason    String?
+  actorId   String?
+  listing   Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  actor     User?         @relation(fields: [actorId], references: [id])
+  createdAt DateTime      @default(now())
+}
+
+model Favorite {
+  userId    String
+  listingId String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, listingId])
+}
+
+model SavedSearch {
+  id        String   @id @default(cuid())
+  name      String
+  filters   String
+  alerts    Boolean  @default(false)
+  userId    String
+  listingId String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing   Listing? @relation(fields: [listingId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Inquiry {
+  id          String        @id @default(cuid())
+  message     String
+  phone       String?
+  email       String?
+  status      InquiryStatus @default(NEW)
+  listingId   String
+  buyerId     String
+  recipientId String?
+  listing     Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  buyer       User          @relation("BuyerInquiries", fields: [buyerId], references: [id])
+  recipient   User?         @relation("RecipientInquiries", fields: [recipientId], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Report {
+  id        String       @id @default(cuid())
+  reason    String
+  details   String?
+  status    ReportStatus @default(OPEN)
+  listingId String?
+  reporterId String
+  listing   Listing?     @relation(fields: [listingId], references: [id])
+  reporter  User         @relation(fields: [reporterId], references: [id])
+  createdAt DateTime     @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String
+  entityId  String
+  metadata  String?
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  createdAt DateTime @default(now())
+}
