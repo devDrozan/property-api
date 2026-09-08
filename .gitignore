@@ -6,3 +6,4 @@ dist/
 generated/
 src/generated/
 .DS_Store
+node_modules
